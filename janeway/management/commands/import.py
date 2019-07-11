@@ -3,7 +3,7 @@ import itertools
 from django.core.management.base import BaseCommand
 import MySQLdb
 
-from janeway.models import Author, Membership, Name, Release, ReleaseType
+from janeway.models import Author, Credit, Membership, Name, Release, ReleaseType
 
 PROD_TYPE_NAMES = {
     2: 'Diskmag',
@@ -59,6 +59,23 @@ PROD_TYPE_NAMES = {
     2206: 'Pack',
 }
 
+JOBS = {
+    0: ('Other', None),
+    1: ('Code', None),
+    2: ('Music', None),
+    3: ('Graphics', None),
+    4: ('Text', None),
+    5: ('Text', 'Editing'),
+    6: ('Code', 'Crack'),
+    7: ('Code', 'Trainer'),
+    8: ('Other', 'Supply'),
+    9: ('Graphics', 'Design'),
+    10: ('Code', 'Fix'),
+    11: ('Other', 'Moral support'),
+    12: ('Graphics', 'ASCII art'),
+    13: ('Graphics', '.diz file logo'),
+}
+
 
 class Command(BaseCommand):
     def handle(self, **options):
@@ -66,6 +83,7 @@ class Command(BaseCommand):
         Author.objects.all().delete()
         Membership.objects.all().delete()
         Release.objects.all().delete()
+        Credit.objects.all().delete()
 
         mysql = MySQLdb.connect(user='janeway', db='janeway', passwd='janeway')
 
@@ -201,13 +219,13 @@ class Command(BaseCommand):
         # Import credits / authors
         print("Importing credits / authors")
         c.execute("""
-            select ID, ReleaseID, AuthorID, NameID, Job
+            select ID, ReleaseID, AuthorID, NameID, Job, CustomJob
             from CREDITS
-            order by ReleaseID, Job
+            order by ReleaseID, Job, CustomJob
         """)
         for release_id, rows in itertools.groupby(c, lambda row: row[1]):
             rows = list(rows)
-            has_overall_authors = rows[0][4] == 0  # use credits with job = 0 as authors
+            has_overall_authors = rows[0][4] == 0 and not rows[0][5]  # use credits with job = 0 as authors
 
             try:
                 release = release_map[release_id]
@@ -216,20 +234,41 @@ class Command(BaseCommand):
 
             author_name_ids = set()
 
-            for credit_id, _, author_id, name_id, job in rows:
-                if has_overall_authors and job != 0:
-                    continue
+            for credit_id, _, author_id, name_id, job, custom_job in rows:
 
                 if name_id is None or name_id == 0:
+                    # credited under primary name
                     try:
-                        author_name_ids.add(primary_name_id_map[author_id])
+                        new_name_id = primary_name_id_map[author_id]
                     except KeyError:  # this author was skipped (probably because it was a BBS)
-                        pass
+                        new_name_id = None
                 else:
+                    # credited under specific name
                     try:
-                        author_name_ids.add(name_id_map[name_id])
+                        new_name_id = name_id_map[name_id]
                     except KeyError:  # this name was skipped (probably because the author was a BBS)
-                        pass
+                        new_name_id = None
+
+                if new_name_id is None:
+                    # can't add credits for this name
+                    continue
+
+                if (not has_overall_authors) or (job == 0 and not custom_job):
+                    # add this as an author
+                    author_name_ids.add(new_name_id)
+
+                if (job != 0 or custom_job):
+                    # add as a credit
+                    category, category_detail = JOBS[job]
+                    if category_detail and custom_job:
+                        description = "%s - %s" % (category_detail, custom_job)
+                    else:
+                        description = category_detail or custom_job or ''
+
+                    Credit.objects.create(
+                        janeway_id=credit_id, release=release, name_id=new_name_id,
+                        category=category, description=description
+                    )
 
             for name_id in author_name_ids:
                 release.author_names.add(name_id)

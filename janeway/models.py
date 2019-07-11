@@ -44,3 +44,11 @@ class Release(models.Model):
 class ReleaseType(models.Model):
     release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='types')
     type_name = models.CharField(max_length=255)
+
+
+class Credit(models.Model):
+    janeway_id = models.IntegerField()
+    release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='credits')
+    name = models.ForeignKey(Name, on_delete=models.CASCADE, related_name='credits')
+    category = models.CharField(max_length=50)
+    description = models.CharField(max_length=255, blank=True)
