@@ -93,10 +93,14 @@ class Command(BaseCommand):
         print("Importing authors")
         # AuthType: 0 = scener, 1 = group, 2 = BBS
         c.execute("""
-            select AUTHORS.id as AuthorID, AuthType, COUNTRIES.Code, NAMES.ID as NameID, Name, Abbrev, IsReal, Hidden
+            select
+                AUTHORS.id as AuthorID, AuthType, COUNTRIES.Code,
+                case when COMPANY_TAG.TagID is null then 0 else 1 end as IsCompany,
+                NAMES.ID as NameID, NAMES.Name, Abbrev, IsReal, Hidden
             from AUTHORS
             inner join NAMES on (AUTHORS.id = NAMES.AuthorID)
             left join COUNTRIES on (AUTHORS.CountryID = COUNTRIES.ID)
+            left join AUTHOR_COMMONS as COMPANY_TAG on (AUTHORS.id = COMPANY_TAG.AuthorID and COMPANY_TAG.TagID = 1641)
             where AuthType <> 2
             order by AUTHORS.id, NAMES.Secondary desc, NAMES.id
         """)
@@ -112,13 +116,14 @@ class Command(BaseCommand):
             country_code = (rows[0][2] or '').upper()
             if country_code == 'WORLDWIDE':
                 country_code = ''
+            is_company = bool(rows[0][3])
 
             real_name = ''
             real_name_hidden = False
             primary_name = None
             names = []
 
-            for _, _, _, name_id, name, abbrev, is_real, hidden in rows:
+            for _, _, _, _, name_id, name, abbrev, is_real, hidden in rows:
                 if not hidden and primary_name is None:
                     primary_name = name
 
@@ -137,7 +142,7 @@ class Command(BaseCommand):
             author = Author.objects.create(
                 janeway_id=author_id, name=primary_name, is_group=is_group,
                 real_name=real_name, real_name_hidden=real_name_hidden,
-                country_code=country_code
+                country_code=country_code, is_company=is_company
             )
             author_id_map[author_id] = author.id
             for name_id, name, abbrev in names:
