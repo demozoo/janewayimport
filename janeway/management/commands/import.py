@@ -54,7 +54,7 @@ PROD_TYPE_NAMES = {
     1639: 'Intro',
     1650: 'Demo',
     1852: 'Cracktro',
-    1910: 'Executable Music',
+    1910: 'Intro',
     2113: 'ASCII',
     2206: 'Pack',
 }
@@ -93,9 +93,10 @@ class Command(BaseCommand):
         print("Importing authors")
         # AuthType: 0 = scener, 1 = group, 2 = BBS
         c.execute("""
-            select AUTHORS.id as AuthorID, AuthType, NAMES.ID as NameID, Name, Abbrev, IsReal, Hidden
+            select AUTHORS.id as AuthorID, AuthType, COUNTRIES.Code, NAMES.ID as NameID, Name, Abbrev, IsReal, Hidden
             from AUTHORS
             inner join NAMES on (AUTHORS.id = NAMES.AuthorID)
+            left join COUNTRIES on (AUTHORS.CountryID = COUNTRIES.ID)
             where AuthType <> 2
             order by AUTHORS.id, NAMES.Secondary desc, NAMES.id
         """)
@@ -108,13 +109,16 @@ class Command(BaseCommand):
         for author_id, rows in itertools.groupby(c, lambda row: row[0]):
             rows = list(rows)
             is_group = (rows[0][1] == 1)
+            country_code = (rows[0][2] or '').upper()
+            if country_code == 'WORLDWIDE':
+                country_code = ''
 
             real_name = ''
             real_name_hidden = False
             primary_name = None
             names = []
 
-            for _, _, name_id, name, abbrev, is_real, hidden in rows:
+            for _, _, _, name_id, name, abbrev, is_real, hidden in rows:
                 if not hidden and primary_name is None:
                     primary_name = name
 
@@ -132,7 +136,8 @@ class Command(BaseCommand):
 
             author = Author.objects.create(
                 janeway_id=author_id, name=primary_name, is_group=is_group,
-                real_name=real_name, real_name_hidden=real_name_hidden
+                real_name=real_name, real_name_hidden=real_name_hidden,
+                country_code=country_code
             )
             author_id_map[author_id] = author.id
             for name_id, name, abbrev in names:
@@ -165,9 +170,9 @@ class Command(BaseCommand):
         PRODUCTION_TYPES = [
             2, 7, 9, 11, 15, 17, 44, 137, 149, 157, 174, 396, 576, 588, 1680, 1683,
             631, 795, 796, 797, 798, 800, 801, 802, 803, 804, 805, 806, 807, 809, 810, 811, 812,
-            814, 815, 816, 817, 818, 1636, 1536, 1537, 1639, 1650, 1852, 2206
+            814, 815, 816, 817, 818, 1636, 1536, 1537, 1639, 1650, 1852, 1910, 2206
         ]
-        MUSIC_TYPES = [799, 1910]
+        MUSIC_TYPES = [799]
         GRAPHICS_TYPES = [808, 813, 1630, 1632]
 
         # Import releases
