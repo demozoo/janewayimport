@@ -61,3 +61,8 @@ class DownloadLink(models.Model):
     release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='download_links')
     url = models.URLField(max_length=255)
     comment = models.TextField(blank=True)
+
+
+class PackContent(models.Model):
+    pack = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='pack_contents')
+    content = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='packed_in')

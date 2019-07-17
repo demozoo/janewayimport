@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 import MySQLdb
 
 from janeway.links import expand
-from janeway.models import Author, Credit, DownloadLink, Membership, Name, Release, ReleaseType
+from janeway.models import Author, Credit, DownloadLink, Membership, Name, PackContent, Release, ReleaseType
 
 PROD_TYPE_NAMES = {
     2: 'Diskmag',
@@ -84,6 +84,7 @@ class Command(BaseCommand):
         Author.objects.all().delete()
         Membership.objects.all().delete()
         Release.objects.all().delete()
+        PackContent.objects.all().delete()
         Credit.objects.all().delete()
         DownloadLink.objects.all().delete()
 
@@ -190,6 +191,7 @@ class Command(BaseCommand):
             inner join RELEASE_COMMONS on (ReleaseID = ID)
             where TagID in (%(prodtype_ids)s)
             and ID not in (select ReleaseID from RELEASE_COMMONS where TagID = 797) -- skip 'originals'
+            and ID not in (select FeatureID from FEATURES where FeatureType in (2, 3)) -- skip demopack intros and megademo parts
         """ % {
             'prodtype_ids': ','.join([str(id) for id in PROD_TYPE_NAMES.keys()]),
         }
@@ -228,6 +230,39 @@ class Command(BaseCommand):
             release_map[release_id] = release
             for type_name in type_names:
                 ReleaseType.objects.create(release=release, type_name=type_name)
+
+        # Import pack contents
+        print("Importing pack contents")
+        c.execute("""
+            select ReleaseID, FeatureID
+            from FEATURES
+            where FeatureType = 1
+        """)
+        for pack_id, content_id in c:
+            try:
+                pack = release_map[pack_id]
+            except KeyError:
+                continue  # this release was skipped (probably because it was an unwanted prod type)
+            try:
+                content = release_map[content_id]
+            except KeyError:
+                continue  # this release was skipped (probably because it was an unwanted prod type)
+
+            PackContent.objects.create(pack=pack, content=content)
+
+        print("Setting aliases for pack intros / demo parts")
+        c.execute("""
+            select ReleaseID, FeatureID
+            from FEATURES
+            where FeatureType in (2, 3)
+        """)
+        for release_id, part_id in c:
+            try:
+                release = release_map[release_id]
+            except KeyError:
+                continue
+
+            release_map[part_id] = release
 
         # Import credits / authors
         print("Importing credits / authors")
