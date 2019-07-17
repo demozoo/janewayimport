@@ -54,3 +54,10 @@ class Credit(models.Model):
     name = models.ForeignKey(Name, on_delete=models.CASCADE, related_name='credits')
     category = models.CharField(max_length=50)
     description = models.CharField(max_length=255, blank=True)
+
+
+class DownloadLink(models.Model):
+    janeway_id = models.IntegerField(unique=True, db_index=True)
+    release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='download_links')
+    url = models.URLField(max_length=255)
+    comment = models.TextField(blank=True)

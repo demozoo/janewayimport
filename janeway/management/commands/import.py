@@ -3,7 +3,8 @@ import itertools
 from django.core.management.base import BaseCommand
 import MySQLdb
 
-from janeway.models import Author, Credit, Membership, Name, Release, ReleaseType
+from janeway.links import expand
+from janeway.models import Author, Credit, DownloadLink, Membership, Name, Release, ReleaseType
 
 PROD_TYPE_NAMES = {
     2: 'Diskmag',
@@ -84,6 +85,7 @@ class Command(BaseCommand):
         Membership.objects.all().delete()
         Release.objects.all().delete()
         Credit.objects.all().delete()
+        DownloadLink.objects.all().delete()
 
         mysql = MySQLdb.connect(user='janeway', db='janeway', passwd='janeway')
 
@@ -187,6 +189,7 @@ class Command(BaseCommand):
             from RELEASES
             inner join RELEASE_COMMONS on (ReleaseID = ID)
             where TagID in (%(prodtype_ids)s)
+            and ID not in (select ReleaseID from RELEASE_COMMONS where TagID = 797) -- skip 'originals'
         """ % {
             'prodtype_ids': ','.join([str(id) for id in PROD_TYPE_NAMES.keys()]),
         }
@@ -282,3 +285,24 @@ class Command(BaseCommand):
 
             for name_id in author_name_ids:
                 release.author_names.add(name_id)
+
+        # Import download links
+        print("Importing download links")
+        c.execute("""
+            select ID, ReleaseID, FileLink, FileType, Comment
+            from FILES
+            where FileType in (0,1,2,3,4)
+            and FileLink <> ''
+            and FileLink <> 'test'
+        """)
+        for janeway_id, release_id, link, file_type, comment in c:
+            try:
+                release = release_map[release_id]
+            except KeyError:
+                continue  # this release was skipped (probably because it was an unwanted prod type)
+
+            url = expand(link, file_type)
+
+            release.download_links.create(
+                janeway_id=janeway_id, url=url, comment=(comment or '')
+            )
