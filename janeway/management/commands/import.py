@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 import MySQLdb
 
 from janeway.links import expand
-from janeway.models import Author, Credit, DownloadLink, Membership, Name, PackContent, Release, ReleaseType
+from janeway.models import Author, Credit, DownloadLink, Membership, Name, PackContent, Release, ReleaseType, SoundtrackLink
 
 PROD_TYPE_NAMES = {
     2: 'Diskmag',
@@ -87,6 +87,7 @@ class Command(BaseCommand):
         PackContent.objects.all().delete()
         Credit.objects.all().delete()
         DownloadLink.objects.all().delete()
+        SoundtrackLink.objects.all().delete()
 
         mysql = MySQLdb.connect(user='janeway', db='janeway', passwd='janeway')
 
@@ -325,6 +326,58 @@ class Command(BaseCommand):
             for name_id in author_name_ids:
                 release.author_names.add(name_id)
 
+        # Import soundtrack / graphic links
+        print("Importing soundtrack links")
+        c.execute("""
+            select distinct FEATURES.ReleaseID, FEATURES.FeatureID
+            from FEATURES
+            INNER JOIN RELEASE_COMMONS on (FeatureID = RELEASE_COMMONS.ReleaseID and TagID = 799)
+            where FeatureType = 0
+        """)
+        for release_id, feature_id in c:
+            try:
+                release = release_map[release_id]
+            except KeyError:
+                continue
+
+            try:
+                feature = release_map[feature_id]
+            except KeyError:
+                continue
+
+            SoundtrackLink.objects.create(release=release, soundtrack=feature)
+            # copy credits from soundtrack to the parent release
+            for credit in Credit.objects.filter(release=feature):
+                Credit.objects.create(
+                    release=release, category='Music',
+                    janeway_id=credit.janeway_id, name_id=credit.name_id, description=credit.description
+                )
+
+        print("Importing graphic credits")
+        c.execute("""
+            select distinct FEATURES.ReleaseID, FEATURES.FeatureID
+            from FEATURES
+            INNER JOIN RELEASE_COMMONS on (FeatureID = RELEASE_COMMONS.ReleaseID and TagID in (808, 813, 1630, 1632))
+            where FeatureType = 0
+        """)
+        for release_id, feature_id in c:
+            try:
+                release = release_map[release_id]
+            except KeyError:
+                continue
+
+            try:
+                feature = release_map[feature_id]
+            except KeyError:
+                continue
+
+            # copy credits from soundtrack to the parent release
+            for credit in Credit.objects.filter(release=feature):
+                Credit.objects.create(
+                    release=release, category='Graphics',
+                    janeway_id=credit.janeway_id, name_id=credit.name_id, description=credit.description
+                )
+
         # Import download links
         print("Importing download links")
         c.execute("""
@@ -345,3 +398,6 @@ class Command(BaseCommand):
             release.download_links.create(
                 janeway_id=janeway_id, url=url, comment=(comment or '')
             )
+
+        print("Removing music releases that only serve as soundtrack credits")
+        Release.objects.filter(supertype='music', title__endswith='-unknown-', download_links__isnull=True).delete()
