@@ -304,7 +304,7 @@ class Command(BaseCommand):
 
             # check whether this is an individual part / pack intro being aliased to the parent prod;
             # if it is, don't add its credits as an overall author
-            is_alias = (release.id != release_id)
+            is_alias = (release.janeway_id != release_id)
 
             author_name_ids = set()
 
