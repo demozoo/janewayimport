@@ -280,6 +280,10 @@ class Command(BaseCommand):
             except KeyError:
                 continue  # this release was skipped (probably because it was an unwanted prod type)
 
+            # check whether this is an individual part / pack intro being aliased to the parent prod;
+            # if it is, don't add its credits as an overall author
+            is_alias = (release.id != release_id)
+
             author_name_ids = set()
 
             for credit_id, _, author_id, name_id, job, custom_job in rows:
@@ -301,7 +305,7 @@ class Command(BaseCommand):
                     # can't add credits for this name
                     continue
 
-                if (not has_overall_authors) or (job == 0 and not custom_job):
+                if ((not has_overall_authors) or (job == 0 and not custom_job)) and not is_alias:
                     # add this as an author
                     author_name_ids.add(new_name_id)
 
