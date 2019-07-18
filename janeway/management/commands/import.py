@@ -232,6 +232,27 @@ class Command(BaseCommand):
             for type_name in type_names:
                 ReleaseType.objects.create(release=release, type_name=type_name)
 
+        print("Setting release platforms")
+
+        # PPC entries
+        c.execute("""
+            select ReleaseID from RELEASE_COMMONS
+            where TagID in (2006, 2152)
+        """)
+        ppc_release_ids = [row[0] for row in c]
+        Release.objects.filter(janeway_id__in=ppc_release_ids).update(platform='ppc')
+
+        # AGA entries
+        c.execute("""
+            select ReleaseID from RELEASE_COMMONS
+            where TagID = 794
+        """)
+        aga_release_ids = [row[0] for row in c]
+        Release.objects.filter(janeway_id__in=aga_release_ids).update(platform='aga')
+
+        # OCS/ECS
+        Release.objects.filter(platform='').update(platform='ocs')
+
         # Import pack contents
         print("Importing pack contents")
         c.execute("""
