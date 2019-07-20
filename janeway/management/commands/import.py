@@ -1,3 +1,4 @@
+import datetime
 import itertools
 
 from django.core.management.base import BaseCommand
@@ -187,7 +188,7 @@ class Command(BaseCommand):
         # Import releases
         print("Importing releases")
         sql = """
-            select ID, Title, TagID
+            select ID, Title, TagID, cast(Date as char) as ReleaseDate
             from RELEASES
             inner join RELEASE_COMMONS on (ReleaseID = ID)
             where TagID in (%(prodtype_ids)s)
@@ -201,6 +202,21 @@ class Command(BaseCommand):
         for release_id, rows in itertools.groupby(c, lambda row: row[0]):
             rows = list(rows)
             title = rows[0][1]
+            release_date_string = rows[0][3]
+
+            if (not release_date_string) or release_date_string[0:4] == '0000':
+                release_date = None
+                release_date_precision = ''
+            elif release_date_string[5:7] == ('00'):
+                release_date = datetime.date(int(release_date_string[0:4]), 1, 1)
+                release_date_precision = 'y'
+            elif release_date_string[8:10] == ('00'):
+                release_date = datetime.date(int(release_date_string[0:4]), int(release_date_string[5:7]), 1)
+                release_date_precision = 'm'
+            else:
+                release_date = datetime.date(int(release_date_string[0:4]), int(release_date_string[5:7]), int(release_date_string[8:10]))
+                release_date_precision = 'd'
+
             type_ids = set()
             type_names = set()
             for row in rows:
@@ -226,7 +242,8 @@ class Command(BaseCommand):
                 continue
 
             release = Release.objects.create(
-                janeway_id=release_id, title=title, supertype=supertype
+                janeway_id=release_id, title=title, supertype=supertype,
+                release_date_date=release_date, release_date_precision=release_date_precision
             )
             release_map[release_id] = release
             for type_name in type_names:
