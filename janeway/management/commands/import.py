@@ -188,7 +188,7 @@ class Command(BaseCommand):
         # Import releases
         print("Importing releases")
         sql = """
-            select ID, Title, TagID, cast(Date as char) as ReleaseDate
+            select ID, Title, TagID, cast(Date as char) as ReleaseDate, SubTitle
             from RELEASES
             inner join RELEASE_COMMONS on (ReleaseID = ID)
             where TagID in (%(prodtype_ids)s)
@@ -203,6 +203,11 @@ class Command(BaseCommand):
             rows = list(rows)
             title = rows[0][1]
             release_date_string = rows[0][3]
+            subtitle = rows[0][4]
+
+            # Add subtitle to '-unknown-' music if provided
+            if '-unknown-' in title and subtitle:
+                title = title.replace('-unknown-', '-unknown- (%s)' % subtitle)
 
             if (not release_date_string) or release_date_string[0:4] == '0000':
                 release_date = None
