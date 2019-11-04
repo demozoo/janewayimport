@@ -86,3 +86,11 @@ class PackContent(models.Model):
 class SoundtrackLink(models.Model):
     release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='soundtrack_links')
     soundtrack = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='appearances_as_soundtrack')
+
+
+class Screenshot(models.Model):
+    janeway_id = models.IntegerField()  # non-unique, as an entry on Janeway can correspond to a range of screenshots
+    suffix = models.CharField(blank=True, max_length=5)
+    release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name='screenshots')
+    url = models.URLField(max_length=255)
+    comment = models.TextField(blank=True)

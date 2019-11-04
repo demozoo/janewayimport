@@ -1,11 +1,12 @@
 import datetime
 import itertools
+import re
 
 from django.core.management.base import BaseCommand
 import MySQLdb
 
 from janeway.links import expand
-from janeway.models import Author, Credit, DownloadLink, Membership, Name, PackContent, Release, ReleaseType, SoundtrackLink
+from janeway.models import Author, Credit, DownloadLink, Membership, Name, PackContent, Release, ReleaseType, Screenshot, SoundtrackLink
 
 PROD_TYPE_NAMES = {
     2: 'Diskmag',
@@ -89,6 +90,7 @@ class Command(BaseCommand):
         Credit.objects.all().delete()
         DownloadLink.objects.all().delete()
         SoundtrackLink.objects.all().delete()
+        Screenshot.objects.all().delete()
 
         mysql = MySQLdb.connect(user='janeway', db='janeway', passwd='janeway')
 
@@ -444,3 +446,44 @@ class Command(BaseCommand):
 
         print("Removing music releases that only serve as soundtrack credits")
         Release.objects.filter(supertype='music', title__endswith='-unknown-', download_links__isnull=True).delete()
+
+        # Import screenshots
+        print("Importing screenshots")
+        c.execute("""
+            select ID, ReleaseID, FileLink, Comment
+            from FILES
+            where FileType = 5
+        """)
+        for janeway_id, release_id, link, comment in c:
+            try:
+                release = release_map[release_id]
+            except KeyError:
+                continue  # this release was skipped (probably because it was an unwanted prod type)
+
+            link = link.strip()
+
+            if link.startswith('http://'):
+                urls_and_suffixes = [(link, '')]
+            else:
+                if link.startswith('/'):
+                    link = link[1:]
+
+                if not re.match(r'^\d+\/', link):
+                    # paths that don't begin with numerics are strange things we don't want, like
+                    # MOD sample listings and retail game boxes
+                    continue
+
+                if link[-2] == '~':
+                    base = link[:-3]
+                    letters = [chr(ch) for ch in range(ord(link[-3]), ord(link[-1])+1)]
+                    urls_and_suffixes = [
+                        ('http://kestra.exotica.org.uk/files/screenies/%s%s.png' % (base, letter), letter)
+                        for letter in letters
+                    ]
+                else:
+                    urls_and_suffixes = [('http://kestra.exotica.org.uk/files/screenies/' + link, '')]
+
+            for url, suffix in urls_and_suffixes:
+                release.screenshots.create(
+                    janeway_id=janeway_id, url=url, suffix=suffix, comment=(comment or '')
+                )
